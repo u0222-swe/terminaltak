@@ -270,7 +270,11 @@ func (m Model) selectedContact() (contacts.Contact, bool) {
 }
 
 // sortedContacts returns contacts that pass the channel filter (sender's
-// channels intersect the enabled set), sorted by callsign.
+// channels intersect the enabled set), sorted by recency (most recent
+// first). Recency matters more than name order for ops: fresh tracks should
+// be visible at a glance, and the contacts panel has a fixed height that
+// clips long lists. Ties break case-insensitively on displayName so two
+// contacts with identical LastSeen render deterministically.
 func (m Model) sortedContacts() []contacts.Contact {
 	if m.deps.Contacts == nil {
 		return nil
@@ -278,7 +282,12 @@ func (m Model) sortedContacts() []contacts.Contact {
 	cs := m.deps.Contacts.Snapshot(func(c contacts.Contact) bool {
 		return m.senderAllowed(c.UID)
 	})
-	sort.Slice(cs, func(i, j int) bool { return displayName(cs[i]) < displayName(cs[j]) })
+	sort.Slice(cs, func(i, j int) bool {
+		if !cs[i].LastSeen.Equal(cs[j].LastSeen) {
+			return cs[i].LastSeen.After(cs[j].LastSeen)
+		}
+		return strings.ToLower(displayName(cs[i])) < strings.ToLower(displayName(cs[j]))
+	})
 	return cs
 }
 
