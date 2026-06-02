@@ -409,23 +409,26 @@ func (m Model) viewMap(width, height int) string {
 	}
 	view = view.AspectFit(innerW, innerH)
 
+	// Apply the user's manual zoom first (1.0 = AutoFit, <1 zoomed in).
+	// Scaling around the natural centre, then re-centring on the selected
+	// contact, keeps the contact in the middle even at high latitudes —
+	// applying zoom AFTER CenterOn would re-pick the centre from a bbox
+	// that may already be world-clamped, drifting it back south.
+	if m.mapZoom > 0 && m.mapZoom != 1.0 {
+		view = view.Scale(m.mapZoom)
+	}
+
 	// Determine which contact (if any) is currently selected so we can
 	// overlay it as a distinct 'X' marker on the map. When the user is
 	// actively cursoring the contacts pane, also recentre the viewport on
-	// that contact (keeping the current span — no zoom change) so the
-	// chosen track is easy to find on a busy map.
+	// that contact (preserving span) so the chosen track is easy to find
+	// on a busy map.
 	selectedUID := ""
 	if m.pane == PaneContacts {
 		if c, ok := m.selectedContact(); ok {
 			selectedUID = c.UID
 			view = view.CenterOn(c.Lat, c.Lon)
 		}
-	}
-
-	// Apply the user's manual zoom (1.0 = AutoFit, <1 zoomed in). Centring
-	// happens first so zoom is around the selected contact when one exists.
-	if m.mapZoom > 0 && m.mapZoom != 1.0 {
-		view = view.Scale(m.mapZoom)
 	}
 
 	canvas := worldmap.Basemap(view, innerW, innerH)
