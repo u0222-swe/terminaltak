@@ -1,0 +1,32 @@
+run:
+  timeout: 3m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - bodyclose
+    - revive
+
+linters-settings:
+  revive:
+    rules:
+      - name: exported
+        disabled: true   # we are pre-1.0; not every exported symbol needs a doc yet
+      - name: package-comments
+        disabled: false
+
+issues:
+  exclude-dirs:
+    - testdata
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
