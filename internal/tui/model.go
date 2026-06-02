@@ -123,6 +123,11 @@ type Model struct {
 	// hint until flashUntil. Set via setFlash; cleared lazily by render.
 	flash      string
 	flashUntil time.Time
+
+	// mapZoom scales the auto-fit viewport around its centre. 1.0 is the
+	// default (AutoFit as computed); <1 zooms in, >1 zooms out. Clamped at
+	// the keystroke handler so it never reaches degenerate spans.
+	mapZoom float64
 }
 
 // setFlash queues a transient status-bar message visible for d.
@@ -137,6 +142,7 @@ func New(deps Deps) Model {
 		deps:           deps,
 		channelEnabled: map[string]bool{},
 		uidToChannels:  map[string][]string{},
+		mapZoom:        1.0,
 	}
 	m.enrollForm = newEnrollModel(deps.Config)
 	m.positionForm = newPositionModel(deps.Config)

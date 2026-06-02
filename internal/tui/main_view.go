@@ -142,6 +142,21 @@ func (m Model) updateMain(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.showLog = true
 		m.logCursor = 0
 		return m, nil
+	case "+", "=":
+		m.mapZoom *= 0.7
+		if m.mapZoom < 0.05 {
+			m.mapZoom = 0.05
+		}
+		return m, nil
+	case "-", "_":
+		m.mapZoom *= 1.4
+		if m.mapZoom > 5.0 {
+			m.mapZoom = 5.0
+		}
+		return m, nil
+	case "0":
+		m.mapZoom = 1.0
+		return m, nil
 	case "up", "k":
 		switch m.pane {
 		case PaneGroups:
@@ -349,7 +364,7 @@ func (m Model) statusBar() string {
 		left := time.Until(m.certExpiry).Round(time.Hour)
 		expiry = "cert expires " + m.certExpiry.Format("2006-01-02") + " (" + left.String() + ")"
 	}
-	tail := "q quit · Tab pane · Space toggle · a all · n none · i chat · p pos · l log"
+	tail := "q quit · Tab pane · Space toggle · a all · n none · i chat · p pos · l log · +/- zoom · 0 reset"
 	if m.flash != "" && time.Now().Before(m.flashUntil) {
 		tail = m.flash
 	}
@@ -407,14 +422,31 @@ func (m Model) viewMap(width, height int) string {
 		}
 	}
 
+	// Apply the user's manual zoom (1.0 = AutoFit, <1 zoomed in). Centring
+	// happens first so zoom is around the selected contact when one exists.
+	if m.mapZoom > 0 && m.mapZoom != 1.0 {
+		view = view.Scale(m.mapZoom)
+	}
+
 	canvas := worldmap.Basemap(view, innerW, innerH)
+	// Draw non-selected contacts first so the selected 'X' is never hidden
+	// by a later contact at the same cell. The selected marker is drawn
+	// after the loop; the self marker (◎) is drawn last so the user's own
+	// position always wins over both.
+	var selCol, selRow int
+	haveSelected := false
 	for _, c := range cs {
 		col, row := view.Project(c.Lat, c.Lon, innerW, innerH)
-		r, _ := runeForAffiliation(c.Affiliation)
 		if c.UID == selectedUID {
-			r = 'X'
+			selCol, selRow = col, row
+			haveSelected = true
+			continue
 		}
+		r, _ := runeForAffiliation(c.Affiliation)
 		canvas[row][col] = r
+	}
+	if haveSelected {
+		canvas[selRow][selCol] = 'X'
 	}
 	if selfLat != 0 || selfLon != 0 {
 		col, row := view.Project(selfLat, selfLon, innerW, innerH)

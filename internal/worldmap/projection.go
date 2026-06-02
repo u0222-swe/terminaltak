@@ -65,6 +65,37 @@ func (v Viewport) Expand(other Viewport) Viewport {
 	return v
 }
 
+// Scale returns a viewport with the same centre as v but its lat and lon
+// spans multiplied by factor. factor < 1 zooms in (smaller bbox), > 1
+// zooms out. The result is clamped to world bounds; if scaling pushes a
+// pole/dateline edge, the opposite edge is pulled in to keep the centre
+// shift-free.
+func (v Viewport) Scale(factor float64) Viewport {
+	cLat := (v.MinLat + v.MaxLat) / 2
+	cLon := (v.MinLon + v.MaxLon) / 2
+	halfLat := (v.MaxLat - v.MinLat) / 2 * factor
+	halfLon := (v.MaxLon - v.MinLon) / 2 * factor
+	out := Viewport{
+		MinLat: cLat - halfLat,
+		MaxLat: cLat + halfLat,
+		MinLon: cLon - halfLon,
+		MaxLon: cLon + halfLon,
+	}
+	if out.MinLat < -90 {
+		out.MinLat = -90
+	}
+	if out.MaxLat > 90 {
+		out.MaxLat = 90
+	}
+	if out.MinLon < -180 {
+		out.MinLon = -180
+	}
+	if out.MaxLon > 180 {
+		out.MaxLon = 180
+	}
+	return out
+}
+
 // CenterOn shifts v so that (lat, lon) lies at its centre, preserving the
 // span on both axes. If the shifted bounds would cross a pole or wrap past
 // ±180° longitude, the offset is reduced so v stays inside the world — in
