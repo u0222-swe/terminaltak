@@ -84,6 +84,12 @@ type Config struct {
 	// Backoff parameters for redial. Zero values get sane defaults.
 	BackoffInitial time.Duration
 	BackoffMax     time.Duration
+
+	// CoTTrace, when non-nil, receives the encoded XML of every event that
+	// crosses the wire (both directions, including position events). Used
+	// for diagnosing why a sender doesn't behave as expected — the in-app
+	// log overlay is filtered, but this captures the raw stream.
+	CoTTrace io.Writer
 }
 
 // Client is the long-lived TAK streaming connection holder.
@@ -240,6 +246,7 @@ func (c *Client) handle(ctx context.Context, conn io.ReadWriteCloser) error {
 				return io.EOF
 			}
 			c.maybeLogChat("recv", ev)
+			c.traceCoT("recv", ev)
 			c.maybeAckProtocol(ev)
 			select {
 			case c.events <- ev:
@@ -274,6 +281,34 @@ func (c *Client) maybeAckProtocol(ev cot.Event) {
 		return
 	}
 	c.log.Info("takclient: protocol ack sent", "version", 0)
+}
+
+// traceCoT writes a single event line to the trace writer when one is
+// configured. Format: "<ts> <dir> <uid> <type> <lat> <lon>  <xml>\n". Errors
+// are swallowed — tracing is best-effort and must not affect the stream.
+func (c *Client) traceCoT(direction string, ev cot.Event) {
+	if c.cfg.CoTTrace == nil {
+		return
+	}
+	var buf bytes.Buffer
+	if err := cot.Encode(&buf, ev); err != nil {
+		return
+	}
+	callsign := ""
+	if ev.Detail.Contact != nil {
+		callsign = ev.Detail.Contact.Callsign
+	}
+	fmt.Fprintf(c.cfg.CoTTrace, "%s %4s uid=%s callsign=%q type=%s lat=%.5f lon=%.5f stale=%s xml=%s\n",
+		time.Now().UTC().Format(time.RFC3339Nano),
+		direction,
+		ev.UID,
+		callsign,
+		ev.Type,
+		ev.Point.Lat,
+		ev.Point.Lon,
+		ev.Stale,
+		buf.String(),
+	)
 }
 
 // maybeLogChat dumps the raw XML of any non-position event so we can
@@ -321,6 +356,7 @@ func (c *Client) writeLoop(ctx context.Context) {
 				continue
 			}
 			c.maybeLogChat("send", ev)
+			c.traceCoT("send", ev)
 			c.writeMu.Lock()
 			err := cot.Encode(conn, ev)
 			c.writeMu.Unlock()

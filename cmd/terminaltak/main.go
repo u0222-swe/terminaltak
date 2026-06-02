@@ -57,7 +57,8 @@ func main() {
 
 func run() error {
 	var (
-		reset = flag.Bool("reset", false, "wipe ~/.config/terminaltak/ (cert, key, ca, config) and start fresh")
+		reset    = flag.Bool("reset", false, "wipe ~/.config/terminaltak/ (cert, key, ca, config) and start fresh")
+		debugCoT = flag.Bool("debug-cot", false, "append every recv/send CoT event (raw XML) to ~/.config/terminaltak/cot-trace.log")
 	)
 	flag.Parse()
 	if *reset {
@@ -66,6 +67,21 @@ func run() error {
 		}
 		fmt.Println("terminaltak: config dir wiped — re-run to enrol fresh")
 		return nil
+	}
+
+	var cotTrace *os.File
+	if *debugCoT {
+		if err := config.EnsureDir(); err != nil {
+			return fmt.Errorf("debug-cot: %w", err)
+		}
+		path := filepath.Join(config.Dir(), "cot-trace.log")
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			return fmt.Errorf("debug-cot: open trace file: %w", err)
+		}
+		defer f.Close()
+		cotTrace = f
+		fmt.Fprintf(os.Stderr, "terminaltak: tracing CoT to %s\n", path)
 	}
 
 	logFile, err := openLogFile()
@@ -127,6 +143,7 @@ func run() error {
 		Port:      cfg.Server.StreamPort,
 		TLSConfig: tlsCfg,
 		Logger:    slog.Default(),
+		CoTTrace:  cotTrace,
 	})
 	go func() {
 		if err := client.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
