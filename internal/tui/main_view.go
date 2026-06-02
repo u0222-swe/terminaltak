@@ -270,11 +270,10 @@ func (m Model) selectedContact() (contacts.Contact, bool) {
 }
 
 // sortedContacts returns contacts that pass the channel filter (sender's
-// channels intersect the enabled set), sorted by recency (most recent
-// first). Recency matters more than name order for ops: fresh tracks should
-// be visible at a glance, and the contacts panel has a fixed height that
-// clips long lists. Ties break case-insensitively on displayName so two
-// contacts with identical LastSeen render deterministically.
+// channels intersect the enabled set), sorted case-insensitively by
+// displayName. Stable name order keeps the list from jumping around as new
+// PLI updates arrive — easier to find a known callsign by eye than recency
+// order, where rows reshuffle every tick.
 func (m Model) sortedContacts() []contacts.Contact {
 	if m.deps.Contacts == nil {
 		return nil
@@ -283,9 +282,6 @@ func (m Model) sortedContacts() []contacts.Contact {
 		return m.senderAllowed(c.UID)
 	})
 	sort.Slice(cs, func(i, j int) bool {
-		if !cs[i].LastSeen.Equal(cs[j].LastSeen) {
-			return cs[i].LastSeen.After(cs[j].LastSeen)
-		}
 		return strings.ToLower(displayName(cs[i])) < strings.ToLower(displayName(cs[j]))
 	})
 	return cs
@@ -466,12 +462,42 @@ func (m Model) viewChannels(width, height int) string {
 func (m Model) viewContacts(width, height int) string {
 	style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(borderColor(m.pane == PaneContacts)).Width(width).Height(height)
 	cs := m.sortedContacts()
-	rows := []string{lipgloss.NewStyle().Bold(true).Render(" contacts")}
-	if len(cs) == 0 {
-		rows = append(rows, lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("  (waiting for events)"))
-	}
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	for i, c := range cs {
+	header := lipgloss.NewStyle().Bold(true).Render(" contacts")
+
+	// Reserve one row for the header. Border + padding consume two more
+	// (top + bottom), so the rows actually available for contacts inside
+	// the box is height-3. Be defensive against tiny panels.
+	visible := height - 3
+	if visible < 1 {
+		visible = 1
+	}
+
+	if len(cs) == 0 {
+		return style.Render(header + "\n" + dimStyle.Render("  (waiting for events)"))
+	}
+
+	// Slide the visible window so the cursor stays on-screen. We don't
+	// persist a scrollOffset in Model — recomputing from cursor+window
+	// each render is enough.
+	offset := 0
+	if m.contactCursor >= visible {
+		offset = m.contactCursor - visible + 1
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > len(cs)-visible && len(cs) > visible {
+		offset = len(cs) - visible
+	}
+	end := offset + visible
+	if end > len(cs) {
+		end = len(cs)
+	}
+
+	rows := []string{header}
+	for i := offset; i < end; i++ {
+		c := cs[i]
 		var marker string
 		if isTAKMember(c) {
 			_, color := runeForAffiliation(c.Affiliation)
@@ -490,6 +516,11 @@ func (m Model) viewContacts(width, height int) string {
 			line = "  " + body
 		}
 		rows = append(rows, line)
+	}
+	// Scroll hint when there are hidden rows above or below the window.
+	if offset > 0 || end < len(cs) {
+		hint := fmt.Sprintf("  %d-%d/%d", offset+1, end, len(cs))
+		rows[0] = header + dimStyle.Render(hint)
 	}
 	return style.Render(strings.Join(rows, "\n"))
 }
