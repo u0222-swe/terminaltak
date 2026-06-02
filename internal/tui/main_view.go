@@ -399,11 +399,15 @@ func (m Model) viewMap(width, height int) string {
 	view = view.AspectFit(innerW, innerH)
 
 	// Determine which contact (if any) is currently selected so we can
-	// overlay it as a distinct 'X' marker on the map.
+	// overlay it as a distinct 'X' marker on the map. When the user is
+	// actively cursoring the contacts pane, also recentre the viewport on
+	// that contact (keeping the current span — no zoom change) so the
+	// chosen track is easy to find on a busy map.
 	selectedUID := ""
 	if m.pane == PaneContacts {
 		if c, ok := m.selectedContact(); ok {
 			selectedUID = c.UID
+			view = view.CenterOn(c.Lat, c.Lon)
 		}
 	}
 

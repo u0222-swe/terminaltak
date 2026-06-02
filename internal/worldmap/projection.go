@@ -65,6 +65,38 @@ func (v Viewport) Expand(other Viewport) Viewport {
 	return v
 }
 
+// CenterOn shifts v so that (lat, lon) lies at its centre, preserving the
+// span on both axes. If the shifted bounds would cross a pole or wrap past
+// ±180° longitude, the offset is reduced so v stays inside the world — in
+// that case the requested point ends up off-centre but still on-screen.
+func (v Viewport) CenterOn(lat, lon float64) Viewport {
+	cLat := (v.MinLat + v.MaxLat) / 2
+	cLon := (v.MinLon + v.MaxLon) / 2
+	out := Viewport{
+		MinLat: v.MinLat + (lat - cLat),
+		MaxLat: v.MaxLat + (lat - cLat),
+		MinLon: v.MinLon + (lon - cLon),
+		MaxLon: v.MaxLon + (lon - cLon),
+	}
+	if out.MinLat < -90 {
+		out.MaxLat += -90 - out.MinLat
+		out.MinLat = -90
+	}
+	if out.MaxLat > 90 {
+		out.MinLat -= out.MaxLat - 90
+		out.MaxLat = 90
+	}
+	if out.MinLon < -180 {
+		out.MaxLon += -180 - out.MinLon
+		out.MinLon = -180
+	}
+	if out.MaxLon > 180 {
+		out.MinLon -= out.MaxLon - 180
+		out.MaxLon = 180
+	}
+	return out
+}
+
 // Project returns the (col, row) cell into a width×height canvas where the
 // given lat/lon lands. The canvas is row-major with row 0 at the top
 // (north). Cells are clamped to the canvas bounds.
