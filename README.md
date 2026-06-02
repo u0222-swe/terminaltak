@@ -9,6 +9,16 @@ A terminal-native [TAK](https://tak.gov) client written in Go. Designed for SSH 
 ![status](https://img.shields.io/badge/status-beta-yellow)
 ![license](https://img.shields.io/badge/license-AGPL--3.0-blue)
 
+## Screenshots
+
+![Main view — world map, channels, contacts, chat](assets/screenshots/01-main-view.png)
+
+<p align="center">
+  <img src="assets/screenshots/02-first-run-setup.png" alt="First-run setup — cert enrolment" width="48%">
+  &nbsp;
+  <img src="assets/screenshots/03-position-editor.png" alt="Position editor" width="48%">
+</p>
+
 ## Features
 
 - **Cert enrollment** — first-run interactive prompt enrolls a client certificate via the standard CSR flow (TAK Server `/Marti/api/tls/signClient/v2`, port 8446 / Basic Auth). Enrolls with `version=1` so the issued cert carries the `1.2.840.113549.1.9.7` extended-key-usage OID that TAK Server uses to gate server-side channel filtering.
@@ -98,6 +108,7 @@ internal/
   tui/                  Bubble Tea model / view / update
 assets/
   logo.png              brand logo (header image)
+  screenshots/          README screenshots
 ```
 
 ## License
