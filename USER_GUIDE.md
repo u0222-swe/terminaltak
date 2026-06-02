@@ -12,8 +12,9 @@ This guide covers day-to-day operation of the TerminalTAK terminal client. For a
 6. [Chat](#chat)
 7. [CoT log overlay](#cot-log-overlay)
 8. [Files on disk](#files-on-disk)
-9. [Troubleshooting](#troubleshooting)
-10. [TAK Server-side requirements](#tak-server-side-requirements)
+9. [Command-line flags](#command-line-flags)
+10. [Troubleshooting](#troubleshooting)
+11. [TAK Server-side requirements](#tak-server-side-requirements)
 
 ---
 
@@ -106,27 +107,25 @@ The PLI publisher picks up new lat/lon / callsign / interval immediately — no 
 ```
 ┌ TerminalTAK — takserver.example.com — TT-01 ─────────────────────────────────┐
 │                                                                              │
-│                      [ Braille world map with contact dots ]                 │
+│                      [ Braille world map with contact markers ]              │
 │                                                                              │
-├──────────────────┬───────────────────────────────────────────────────────────┤
-│ Channels         │ Contacts                                                  │
-│ [x] testchan_common │  callsign      role         last seen                     │
-│ [x] testchan_alpha  │  ALPHA-01      Team Member  3 s ago                       │
-│ [ ] testchan_bravo  │  HQ            HQ           17 s ago                      │
-├──────────────────┴───────────────────────────────────────────────────────────┤
-│ Chat — All Chat Rooms                                                        │
-│ [12:03] ALPHA-01: rolling out                                                │
-│ [12:04] TT-01:    copy                                                        │
-└──────────────────────────────────────────────────────────────────────────────┘
+├─────────────────────┬─────────────────────────────┬──────────────────────────┤
+│ channels            │ contacts 1-3/8              │ chat                     │
+│ ▸[x] tac_common (IN/OUT) │  ● ALPHA-01    59.33, 18.07 │ [12:03] ALPHA: rolling out │
+│  [ ] tac_alpha  (OUT)    │  ● BRAVO-02    59.34, 18.04 │ [12:04] TT-01: copy        │
+│  [x] tac_bravo  (IN/OUT) │ ▸● HQ          59.33, 18.06 │                          │
+└─────────────────────┴─────────────────────────────┴──────────────────────────┘
 ```
 
 Three panes cycle with `Tab` / `Shift+Tab`:
 
 - **Channels** — observed access channels. The cursor row is highlighted; `Space` toggles, `a` enables all, `n` disables all
-- **Contacts** — observed peers, sorted by recency. `Enter` (well, `i` — see below) opens a DM to the highlighted contact
+- **Contacts** — observed peers, sorted case-insensitively by callsign. Fixed height: when there are more contacts than fit, the list scrolls with the cursor (a `n-m/total` indicator appears in the header). `i` opens a DM to the highlighted contact. The selected contact gets an `X` marker on the map — drawn on top of any overlapping contacts — and the viewport recentres on it. Tab away from the Contacts pane and the map snaps back to auto-fit
 - **Chat** — combined All-Chat + DM history for the selected conversation
 
-The status row at the bottom shows connection state (`connected`, `reconnecting`, `disconnected`) and last error, if any.
+Pressing `+` / `-` zooms the map in or out around the current centre (the selected contact if any, otherwise the auto-fit centre). `0` resets to auto-fit. Zoom is preserved across pane switches.
+
+The status row at the bottom shows connection state (`connected`, `reconnecting`, `disconnected`) and last error, if any. On startup an ASCII shield logo splash is shown for 2 seconds before the TUI takes over, provided the terminal is at least 81 columns wide.
 
 ---
 
@@ -136,7 +135,7 @@ The status row at the bottom shows connection state (`connected`, `reconnecting`
 
 | Key       | Action                                                                |
 |-----------|-----------------------------------------------------------------------|
-| `q`       | quit                                                                  |
+| `q` / `Ctrl+C` | quit                                                             |
 | `Tab` / `Shift+Tab` | cycle pane focus (Channels → Contacts → Chat)               |
 | `↑` / `k` | move cursor up in focused pane                                        |
 | `↓` / `j` | move cursor down in focused pane                                      |
@@ -147,6 +146,9 @@ The status row at the bottom shows connection state (`connected`, `reconnecting`
 | `p`       | open position editor                                                  |
 | `l`       | open CoT log overlay                                                  |
 | `r`       | reconnect (placeholder)                                               |
+| `+` / `=` | zoom map in (centred on selected contact, or auto-fit centre)         |
+| `-`       | zoom map out                                                          |
+| `0`       | reset zoom to auto-fit                                                |
 
 ### Chat input
 
@@ -172,7 +174,19 @@ The status row at the bottom shows connection state (`connected`, `reconnecting`
 | `Space`         | toggle random-walk-Sweden checkbox (when focused on row) |
 | `Enter` on text field | save and return to main view                       |
 | `Enter` on random-walk row | toggle (stay in editor)                       |
-| `Esc`           | quit program                                             |
+| `Enter` on `[ Exit ]` row | quit program                                  |
+| `Esc` / `Ctrl+C` | quit program                                            |
+
+### First-run setup (enrol form)
+
+| Key             | Action                                                   |
+|-----------------|----------------------------------------------------------|
+| `Tab` / `↓` / `↑` / `Shift+Tab` | move between rows                          |
+| `←` / `→` on method row | switch enrol-new ↔ import-p12                      |
+| `Space` on insecure row | toggle skip-TLS-verify                             |
+| `Enter` on text field | submit (run enrolment)                             |
+| `Enter` on `[ Exit ]` row | quit program                                  |
+| `Esc` / `Ctrl+C` | quit program                                            |
 
 ---
 
@@ -254,10 +268,29 @@ A persistent log of every CoT event also goes to `~/.config/terminaltak/terminal
 ├── cert.pem             # client leaf cert (mode 0600)
 ├── key.pem              # client private key (mode 0600)
 ├── ca.pem               # server CA chain (mode 0644)
-└── terminaltak.log      # rolling slog output (info+warn+error)
+├── terminaltak.log      # rolling slog output (info+warn+error)
+└── cot-trace.log        # written only when -debug-cot is passed
 ```
 
 `config.yaml` is rewritten atomically (write-then-rename) so a crash mid-save will not leave a truncated file.
+
+---
+
+## Command-line flags
+
+| Flag          | Effect                                                                       |
+|---------------|------------------------------------------------------------------------------|
+| `-reset`      | wipe `~/.config/terminaltak/` (cert, key, ca, config) and exit               |
+| `-debug-cot`  | append every recv/send CoT event (raw XML) to `~/.config/terminaltak/cot-trace.log` for offline diagnosis |
+
+`-debug-cot` is the fastest way to see what is actually crossing the wire when a contact behaves oddly. Each line records direction, UID, callsign, type, lat/lon, the wire `stale` value, and the full re-encoded XML.
+
+```sh
+./terminaltak -debug-cot
+# in another shell:
+tail -f ~/.config/terminaltak/cot-trace.log
+grep 'callsign="abc"' ~/.config/terminaltak/cot-trace.log | head
+```
 
 ---
 
