@@ -7,6 +7,14 @@ import (
 	"io"
 )
 
+// MaxEventBytes caps how many bytes a single CoT event may consume from the
+// wire. The TAK server is mutually authenticated so this is hardening rather
+// than a trust boundary, but a compromised or malicious server could otherwise
+// stream one unbounded <event> element and exhaust client memory, since
+// xml.Decoder buffers a whole element before DecodeElement returns. Real CoT
+// events are a few KB; 1 MiB is comfortably above any legitimate event.
+const MaxEventBytes = 1 << 20
+
 // Decode consumes a stream of CoT XML events from r and emits parsed Events
 // on the returned channel. The TAK wire format is a sequence of <event/>
 // elements concatenated without any wrapping root element; xml.Decoder
@@ -21,7 +29,8 @@ func Decode(r io.Reader) (<-chan Event, <-chan error) {
 	go func() {
 		defer close(events)
 		defer close(errs)
-		dec := xml.NewDecoder(r)
+		capped := &byteCapReader{r: r, limit: MaxEventBytes}
+		dec := xml.NewDecoder(capped)
 		for {
 			tok, err := dec.Token()
 			if err != nil {
@@ -40,11 +49,37 @@ func Decode(r io.Reader) (<-chan Event, <-chan error) {
 				errs <- fmt.Errorf("cot: decode event: %w", err)
 				return
 			}
+			// A complete event was decoded; reset the per-event byte budget
+			// for the next one.
+			capped.reset()
 			events <- ev
 		}
 	}()
 	return events, errs
 }
+
+// byteCapReader fails a read once more than limit bytes have been pulled from
+// the underlying reader since the last reset(). Decode resets it after each
+// successfully decoded event, bounding the size of any single event. Because
+// xml.Decoder reads ahead, the counter may include the leading bytes of the
+// next event, making the cap approximate — but it reliably stops a single
+// oversized element from consuming unbounded memory.
+type byteCapReader struct {
+	r     io.Reader
+	n     int
+	limit int
+}
+
+func (c *byteCapReader) Read(p []byte) (int, error) {
+	if c.n > c.limit {
+		return 0, fmt.Errorf("cot: event exceeds %d bytes", c.limit)
+	}
+	n, err := c.r.Read(p)
+	c.n += n
+	return n, err
+}
+
+func (c *byteCapReader) reset() { c.n = 0 }
 
 // Encode marshals a single event to XML and writes it followed by a newline.
 // The newline is not required by TAK but eases tcpdump / log inspection.

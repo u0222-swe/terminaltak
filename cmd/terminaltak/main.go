@@ -417,10 +417,14 @@ func runSetupTUI(cfg *config.Config, _ *takclient.Client) error {
 // import-p12 paths.
 func makeEnrollFunc(cfg *config.Config) tui.EnrollFunc {
 	return func(req tui.EnrollRequest) error {
-		// Persist the connection target up-front so the live TUI knows
-		// where to connect even if the user's Insecure flag was just
-		// flipped.
-		cfg.Server.InsecureSkipVerify = req.Insecure
+		// req.Insecure only governs the one-shot enrollment HTTP exchange,
+		// where the server's CA may not yet be trusted locally. It must NOT
+		// silently become the permanent setting for the long-lived streaming
+		// and Marti-API connections — that would leave every later session
+		// open to MITM. Once enrollment completes we have the server's CA on
+		// disk (ca.pem), so the operational connection can verify against it.
+		// We therefore only carry the insecure flag forward when no CA was
+		// obtained to verify against (a self-contained p12 with no chain).
 		if req.Method == tui.MethodEnrollNew {
 			cfg.Server.Host = req.Host
 			cfg.Server.EnrollPort = req.Port
@@ -449,15 +453,23 @@ func makeEnrollFunc(cfg *config.Config) tui.EnrollFunc {
 			if err := writePEM(outDir, "key.pem", keyPEM, 0o600); err != nil {
 				return err
 			}
-			return writePEM(outDir, "ca.pem", caPEM, 0o644)
+			if err := writePEM(outDir, "ca.pem", caPEM, 0o644); err != nil {
+				return err
+			}
+			cfg.Server.InsecureSkipVerify = req.Insecure && len(caPEM) == 0
+			return config.Save(cfg)
 		}
 		// Import .p12 path. The TUI does not collect host/port for this
 		// branch — the user should set them in config.yaml after import,
 		// or we keep whatever was already there.
-		if err := config.Save(cfg); err != nil {
+		if err := enroll.ImportP12(req.P12Path, req.P12Pass, config.Dir()); err != nil {
 			return err
 		}
-		return enroll.ImportP12(req.P12Path, req.P12Pass, config.Dir())
+		// Verify against the imported chain when one is present; only keep
+		// the insecure flag if the bundle carried no CA certs.
+		caData, _ := os.ReadFile(filepath.Join(config.Dir(), "ca.pem"))
+		cfg.Server.InsecureSkipVerify = req.Insecure && len(caData) == 0
+		return config.Save(cfg)
 	}
 }
 

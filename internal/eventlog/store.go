@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/u0222-swe/terminaltak/internal/cot"
+	"github.com/u0222-swe/terminaltak/internal/safetext"
 )
 
 // Entry is one row of the log. Fields are denormalised so the TUI can
@@ -56,7 +57,7 @@ func (s *Store) Apply(ev cot.Event) {
 	e := Entry{
 		Time:        parseTime(ev.Time),
 		UID:         ev.UID,
-		Type:        ev.Type,
+		Type:        safetext.Clean(ev.Type),
 		Lat:         ev.Point.Lat,
 		Lon:         ev.Point.Lon,
 		Affiliation: ev.Affiliation(),
@@ -65,10 +66,10 @@ func (s *Store) Apply(ev cot.Event) {
 		e.Time = time.Now().UTC()
 	}
 	if ev.Detail.Contact != nil {
-		e.Callsign = ev.Detail.Contact.Callsign
+		e.Callsign = safetext.Clean(ev.Detail.Contact.Callsign)
 	}
 	if ev.Detail.Group != nil {
-		e.Group = ev.Detail.Group.Name
+		e.Group = safetext.Clean(ev.Detail.Group.Name)
 	}
 
 	s.mu.Lock()
