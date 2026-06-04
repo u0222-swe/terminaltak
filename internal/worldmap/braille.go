@@ -30,7 +30,7 @@ const brailleBase = 0x2800
 // Compared to per-cell point-in-polygon (the previous approach), this
 // raises the apparent rendering resolution by 8× without changing the
 // outer canvas size.
-func renderBrailleBasemap(viewport Viewport, width, height int) [][]rune {
+func renderBrailleBasemap(viewport Viewport, width, height int, lod LOD) [][]rune {
 	canvas := make([][]rune, height)
 	for i := range canvas {
 		canvas[i] = make([]rune, width)
@@ -56,7 +56,7 @@ func renderBrailleBasemap(viewport Viewport, width, height int) [][]rune {
 				lon := leftLon + (float64(dx)+0.5)*(cellLonSpan/2)
 				for dy := 0; dy < 4; dy++ {
 					lat := topLat - (float64(dy)+0.5)*(cellLatSpan/4)
-					if pointInLand(lat, lon) {
+					if pointInLand(lat, lon, lod) {
 						bits |= brailleDotMask[dx][dy]
 					}
 				}
