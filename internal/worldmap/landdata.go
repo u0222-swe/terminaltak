@@ -40,16 +40,19 @@ const (
 	LOD10             // fine — high zoom
 )
 
-// lodForSpan picks the land dataset for a viewport based on its larger
-// geographic span (degrees). The thresholds are tuned so a full-globe view
-// uses 110m, a country-sized view uses 50m, and a tight regional view uses
-// 10m.
+// lodForSpan picks the land dataset for a viewport based on its *smaller*
+// geographic span (degrees). We use the smaller axis on purpose: AspectFit
+// inflates the longitude span to compensate for cell aspect and the cos(lat)
+// shortening at high latitudes, so the larger span no longer reflects how far
+// the user has actually zoomed. Using the smaller axis means a country-sized
+// view (e.g. Sweden, ~14° of latitude) correctly selects 50m — which includes
+// islands like Öland and Gotland that the coarse 110m dataset drops.
 func lodForSpan(v Viewport) LOD {
-	span := math.Max(v.MaxLat-v.MinLat, v.MaxLon-v.MinLon)
+	span := math.Min(v.MaxLat-v.MinLat, v.MaxLon-v.MinLon)
 	switch {
-	case span > 25:
+	case span > 30:
 		return LOD110
-	case span > 4:
+	case span > 3.5:
 		return LOD50
 	default:
 		return LOD10
