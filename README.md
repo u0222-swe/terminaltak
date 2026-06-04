@@ -31,7 +31,7 @@ A terminal-native [TAK](https://tak.gov) client written in Go. Designed for SSH 
 - **PLI publishing** — own position published every 5–300 s (default 30 s). Lat/lon enterable as decimal or MGRS. `F2` randomises a Swedish point. Optional **random-walk-Sweden** mode re-rolls the position on every tick — handy for testing without nudging coordinates by hand.
 - **Point dropper** — `m` drops a map marker ATAK-style: aim a `+` crosshair on the map (arrow keys / `hjkl`), then pick affiliation (Friendly / Hostile / Neutral / Unknown) and a label/remarks. The marker (`a-{f,h,n,u}-G`, `<archive/>` for server persistence) is broadcast to your active channels and shown locally at once. `M` lists your markers and deletes them (broadcasting a `t-x-d-d` CoT delete).
 - **CoT log overlay** — `l` opens a scrollable raw-event log with the last N CoT events for protocol debugging.
-- **Skip TLS verify** — config flag for self-signed labs.
+- **Skip TLS verify** — config flag for self-signed labs; a persistent `⚠ TLS UNVERIFIED` banner shows in the status bar while verification is off.
 
 ## Status
 
