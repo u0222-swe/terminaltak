@@ -1,6 +1,6 @@
 module github.com/u0222-swe/terminaltak
 
-go 1.25.9
+go 1.25.11
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0

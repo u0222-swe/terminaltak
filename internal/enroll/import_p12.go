@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"software.sslmate.com/src/go-pkcs12"
 )
@@ -106,10 +107,16 @@ func importP12OpenSSL(p12Path, password string) (leafPEM, keyPEM, caPEM []byte, 
 	if lerr != nil {
 		return nil, nil, nil, fmt.Errorf("openssl not found in PATH")
 	}
+	// Pass the password on openssl's stdin ("-passin stdin") rather than as a
+	// "pass:<secret>" command-line argument. Process arguments are visible to
+	// any other user on the host via the process table (ps / /proc), so a
+	// command-line password would leak the p12 secret for the lifetime of the
+	// invocation; stdin is not exposed that way.
 	run := func(extraArgs ...string) ([]byte, error) {
-		args := append([]string{"pkcs12", "-in", p12Path, "-passin", "pass:" + password}, extraArgs...)
+		args := append([]string{"pkcs12", "-in", p12Path, "-passin", "stdin"}, extraArgs...)
 		var stderr bytes.Buffer
 		cmd := exec.Command(openssl, args...)
+		cmd.Stdin = strings.NewReader(password + "\n")
 		cmd.Stderr = &stderr
 		out, err := cmd.Output()
 		if err == nil {
@@ -121,6 +128,7 @@ func importP12OpenSSL(p12Path, password string) (leafPEM, keyPEM, caPEM []byte, 
 		legacyArgs := append(args, "-legacy")
 		var stderr2 bytes.Buffer
 		cmd2 := exec.Command(openssl, legacyArgs...)
+		cmd2.Stdin = strings.NewReader(password + "\n")
 		cmd2.Stderr = &stderr2
 		out2, err2 := cmd2.Output()
 		if err2 == nil {

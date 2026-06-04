@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/u0222-swe/terminaltak/internal/cot"
+	"github.com/u0222-swe/terminaltak/internal/safetext"
 )
 
 // Direction is the message direction relative to the local user.
@@ -112,10 +113,10 @@ func (s *Store) IngestEvent(ev cot.Event) *Message {
 		ID:             ev.UID,
 		Time:           parseTime(ev.Time),
 		Sender:         senderUID,
-		SenderCallsign: chat.SenderCallsign,
+		SenderCallsign: safetext.Clean(chat.SenderCallsign),
 		RecipientUID:   chat.ID,
-		Chatroom:       chat.Chatroom,
-		Text:           rem.Text,
+		Chatroom:       safetext.Clean(chat.Chatroom),
+		Text:           safetext.Clean(rem.Text),
 		Direction:      dir,
 	}
 	if dir == DirectionIn {

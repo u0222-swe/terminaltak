@@ -134,12 +134,18 @@ func (p *positionModel) visibleFields() []*textinput.Model {
 }
 
 func (p *positionModel) totalFocusable() int {
-	// mode toggle (0) + visible fields + random-walk checkbox + exit
-	return 1 + len(p.visibleFields()) + 2
+	// mode toggle (0) + visible fields + random-walk checkbox + save + exit
+	return 1 + len(p.visibleFields()) + 3
+}
+
+// saveIdx is the focusable index of the [ ENTER ] (save) button — one past
+// the random-walk checkbox. exitIdx follows it.
+func (p *positionModel) saveIdx() int {
+	return 1 + len(p.visibleFields()) + 1
 }
 
 func (p *positionModel) exitIdx() int {
-	return 1 + len(p.visibleFields()) + 1
+	return 1 + len(p.visibleFields()) + 2
 }
 
 func (p *positionModel) blurAll() {
@@ -381,6 +387,12 @@ func (m Model) viewPosition() string {
 	} else {
 		lines = append(lines, "  "+rwLabel)
 	}
+	saveLabel := "[ ENTER ]"
+	if pm.focusIdx == pm.saveIdx() {
+		saveLabel = cursorStyle.Render("▸ ") + saveLabel + "   " + hintStyle.Render("save position")
+	} else {
+		saveLabel = "  " + saveLabel
+	}
 	exitLabel := "[ Exit ]"
 	if pm.focusIdx == pm.exitIdx() {
 		exitLabel = cursorStyle.Render("▸ ") + exitLabel
@@ -389,6 +401,7 @@ func (m Model) viewPosition() string {
 	}
 	lines = append(lines,
 		"",
+		saveLabel,
 		exitLabel,
 		"",
 		hintStyle.Render("  team color and role are ATAK display attributes — what other clients"),

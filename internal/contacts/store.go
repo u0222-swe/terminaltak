@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/u0222-swe/terminaltak/internal/cot"
+	"github.com/u0222-swe/terminaltak/internal/safetext"
 )
 
 // Contact is the snapshot of a single TAK contact.
@@ -77,11 +78,11 @@ func (s *Store) Apply(ev cot.Event) {
 		c.Stale = stale
 	}
 	if ev.Detail.Contact != nil && ev.Detail.Contact.Callsign != "" {
-		c.Callsign = ev.Detail.Contact.Callsign
+		c.Callsign = safetext.Clean(ev.Detail.Contact.Callsign)
 	}
 	if ev.Detail.Group != nil {
-		c.TeamColor = ev.Detail.Group.Name
-		c.Role = ev.Detail.Group.Role
+		c.TeamColor = safetext.Clean(ev.Detail.Group.Name)
+		c.Role = safetext.Clean(ev.Detail.Group.Role)
 	}
 
 	s.contacts[ev.UID] = c
