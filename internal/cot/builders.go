@@ -201,6 +201,100 @@ func BuildGeoChat(sender SelfInfo, dest ChatDest, text, msgUID string, now time.
 	return ev, nil
 }
 
+// MarkerType maps a point-dropper affiliation to its CoT type string
+// (MIL-STD-2525 affiliation letter + the "G" ground battle dimension).
+// Unknown / unrecognised affiliations fall back to "a-u-G".
+func MarkerType(a Affiliation) string {
+	switch a {
+	case AffiliationHostile:
+		return "a-h-G"
+	case AffiliationNeutral:
+		return "a-n-G"
+	case AffiliationFriendly, AffiliationAssumedFriend:
+		return "a-f-G"
+	default:
+		return "a-u-G"
+	}
+}
+
+// BuildMarker constructs a user-placed map marker — the equivalent of ATAK's
+// "point dropper". cotType is the full CoT type (use MarkerType); uid is the
+// stable per-marker identifier, or "" to mint a fresh UUIDv4 (the value used
+// is returned so the caller can store it for later edit/delete). label becomes
+// the on-map <contact callsign>; remarks an optional free-text note.
+// creatorUID links the marker back to this client (peers' "who dropped this"),
+// and staleAfter controls how long peers retain the marker before ageing it
+// out. The <archive/> detail asks TAK Server to persist the marker so
+// late-joining clients still receive it.
+func BuildMarker(creatorUID, uid, cotType, label, remarks string, lat, lon, hae float64, staleAfter time.Duration, now time.Time) (Event, string, error) {
+	if uid == "" {
+		id, err := newUUID()
+		if err != nil {
+			return Event{}, "", err
+		}
+		uid = id
+	}
+	if cotType == "" {
+		cotType = "a-u-G"
+	}
+	t := now.UTC()
+	ev := Event{
+		Version: Version,
+		UID:     uid,
+		Type:    cotType,
+		How:     "h-g-i-g-o",
+		Time:    t.Format(TimeFormat),
+		Start:   t.Format(TimeFormat),
+		Stale:   t.Add(staleAfter).Format(TimeFormat),
+		Point: Point{
+			Lat: lat,
+			Lon: lon,
+			HAE: hae,
+			CE:  9999999.0,
+			LE:  9999999.0,
+		},
+		Detail: Detail{
+			Contact: &Contact{Callsign: label},
+			Link:    &Link{UID: creatorUID, Type: "a-f-G-U-C", Relation: "p-p"},
+			Other: []RawElement{
+				{XMLName: xml.Name{Local: "archive"}},
+			},
+		},
+	}
+	if remarks != "" {
+		ev.Detail.Remarks = &Remarks{Text: remarks}
+	}
+	return ev, uid, nil
+}
+
+// BuildMarkerDelete constructs the CoT "delete" task that instructs peers and
+// the server to remove the marker identified by targetUID. TAK recognises a
+// "t-x-d-d" event carrying a <link> to the target plus a <__forcedelete/>
+// detail. targetType should be the deleted marker's CoT type (e.g. "a-h-G").
+func BuildMarkerDelete(targetUID, targetType string, now time.Time) (Event, error) {
+	id, err := newUUID()
+	if err != nil {
+		return Event{}, err
+	}
+	t := now.UTC()
+	return Event{
+		Version: Version,
+		UID:     id,
+		Type:    "t-x-d-d",
+		How:     "h-g-i-g-o",
+		Time:    t.Format(TimeFormat),
+		Start:   t.Format(TimeFormat),
+		Stale:   t.Add(time.Minute).Format(TimeFormat),
+		Point:   Point{CE: 9999999.0, LE: 9999999.0},
+		Detail: Detail{
+			Link: &Link{UID: targetUID, Type: targetType, Relation: "none"},
+			Other: []RawElement{
+				{XMLName: xml.Name{Local: "__forcedelete"}},
+			},
+		},
+	}, nil
+}
+
 // BuildTakProtocolAck constructs the client-side TakRequest event that
 // answers the server's t-x-takp-v announcement. The wire type is
 // "t-x-takp-q" (REQUEST) — TAK Server's negotiation listener checks

@@ -88,6 +88,14 @@ type DirectoryMsg struct {
 	Err           error
 }
 
+// MarkerSendResultMsg conveys the success/failure of transmitting a dropped
+// marker or a marker-delete event. The marker is already stored/removed
+// locally; this only surfaces a wire error in the status bar.
+type MarkerSendResultMsg struct {
+	UID string
+	Err error
+}
+
 // waitForEvent returns a tea.Cmd that blocks on the next inbound event and
 // converts it into an EventMsg. After Update processes the message it must
 // re-issue waitForEvent so the pump keeps running for the lifetime of the

@@ -38,6 +38,7 @@ import (
 	"github.com/u0222-swe/terminaltak/internal/cot"
 	"github.com/u0222-swe/terminaltak/internal/enroll"
 	"github.com/u0222-swe/terminaltak/internal/eventlog"
+	"github.com/u0222-swe/terminaltak/internal/markers"
 	"github.com/u0222-swe/terminaltak/internal/martiapi"
 	"github.com/u0222-swe/terminaltak/internal/pli"
 	"github.com/u0222-swe/terminaltak/internal/takclient"
@@ -154,6 +155,7 @@ func run() error {
 	contactStore := contacts.NewStore(cfg.SelfPos.UID)
 	chatStore := chat.NewStore(cfg.SelfPos.UID)
 	logStore := eventlog.NewStore(eventlog.DefaultCapacity, cfg.SelfPos.UID)
+	markerStore := markers.NewStore()
 
 	publisher := pli.New(selfInfoFromConfig(cfg), time.Duration(cfg.SelfPos.IntervalSeconds)*time.Second, client.Send, slog.Default())
 	go func() {
@@ -224,6 +226,7 @@ func run() error {
 		Contacts:          contactStore,
 		Chat:              chatStore,
 		EventLog:          logStore,
+		Markers:           markerStore,
 		Publisher:         publisher,
 		Client:            client,
 		Send:              client.Send,
