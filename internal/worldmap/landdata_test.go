@@ -3,23 +3,26 @@ package worldmap
 import "testing"
 
 func TestLodForSpan(t *testing.T) {
+	// LOD is chosen from the smaller axis span. Use a much wider lon span so
+	// the latitude span is the deciding (smaller) axis — mirroring how
+	// AspectFit inflates longitude in real viewports.
 	cases := []struct {
-		span float64
-		want LOD
+		latSpan float64
+		want    LOD
 	}{
 		{180, LOD110},
 		{40, LOD110},
-		{25.1, LOD110},
-		{20, LOD50},
-		{5, LOD50},
-		{4.1, LOD50},
-		{4, LOD10},
+		{30.1, LOD110},
+		{25, LOD50},
+		{14, LOD50}, // Sweden-sized view -> 50m (includes Öland/Gotland)
+		{3.6, LOD50},
+		{3.5, LOD10},
 		{0.5, LOD10},
 	}
 	for _, c := range cases {
-		v := Viewport{MinLat: 0, MaxLat: c.span, MinLon: 0, MaxLon: c.span / 2}
+		v := Viewport{MinLat: 0, MaxLat: c.latSpan, MinLon: 0, MaxLon: c.latSpan + 200}
 		if got := lodForSpan(v); got != c.want {
-			t.Errorf("span %.1f: lod = %d, want %d", c.span, got, c.want)
+			t.Errorf("latSpan %.1f: lod = %d, want %d", c.latSpan, got, c.want)
 		}
 	}
 }
