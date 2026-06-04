@@ -1,8 +1,9 @@
 // Package worldmap renders an ASCII-art world map for the TerminalTAK TUI.
 //
-// Land masses are sourced from Natural Earth's ne_110m_land dataset
-// (public domain) embedded via go:embed and rendered with Unicode Braille
-// pattern characters for sub-pixel resolution. The projection is plain
+// Land masses are sourced from Natural Earth's land datasets (public domain)
+// at three scales (110m / 50m / 10m), embedded via go:embed and selected by
+// zoom level, and rendered with Unicode Braille pattern characters for
+// sub-pixel resolution. The projection is plain
 // equirectangular plus an AspectFit step that compensates for the
 // terminal cell aspect ratio (~1×2) and the cos(lat) shortening of
 // longitude distance at high latitudes — without it, viewports near the
