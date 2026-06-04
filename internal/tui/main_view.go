@@ -407,6 +407,19 @@ func (m Model) statusBar() string {
 		tail = m.flash
 	}
 	body := fmt.Sprintf("%s · %s · %.1f ev/s · %s", state, expiry, m.eventsRate, tail)
+	// Persistent MITM warning: when server-certificate verification is
+	// disabled the connection offers no protection against an interposed
+	// attacker, so keep it visible for the whole session rather than just
+	// at enrollment time.
+	if m.deps.Config != nil && m.deps.Config.Server.InsecureSkipVerify {
+		const label = " ⚠ TLS UNVERIFIED "
+		warn := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("196")).Render(label)
+		// Truncate the plain body to the remaining width before prepending
+		// the styled warning, so the rune-based truncate never slices
+		// through the warning's escape sequences.
+		rest := m.width - len([]rune(label)) - 1
+		return style.Render(warn + " " + truncate(body, rest))
+	}
 	return style.Render(truncate(body, m.width))
 }
 
@@ -698,15 +711,21 @@ func borderColor(focused bool) lipgloss.Color {
 	return lipgloss.Color("237")
 }
 
+// truncate shortens s to at most n cells. It counts runes rather than bytes
+// so it never slices through the middle of a multi-byte UTF-8 sequence (which
+// would emit an invalid-rune replacement glyph). Width is approximated as one
+// cell per rune; that is correct for the latin-script callsigns and chat this
+// renders and degrades gracefully for wide runes.
 func truncate(s string, n int) string {
 	if n <= 0 {
 		return ""
 	}
-	if len(s) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
 	if n <= 1 {
 		return "…"
 	}
-	return s[:n-1] + "…"
+	return string(r[:n-1]) + "…"
 }

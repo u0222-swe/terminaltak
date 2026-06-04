@@ -312,6 +312,19 @@ A persistent log of every CoT event also goes to `~/.config/terminaltak/terminal
 
 `config.yaml` is rewritten atomically (write-then-rename) so a crash mid-save will not leave a truncated file.
 
+### Sensitive data at rest
+
+`cert.pem`/`key.pem` (your client identity) and both log files are written with
+restrictive permissions, but be aware of what they hold:
+
+- `key.pem` is your private key — treat the whole `~/.config/terminaltak/`
+  directory as a secret. Use `-reset` to wipe it when decommissioning a host.
+- `terminaltak.log` records the raw XML of inbound/outbound chat, and
+  `cot-trace.log` (only with `-debug-cot`) records every event including
+  positions and message text, in cleartext. Neither file is rotated or
+  size-capped, so it grows until you delete it. Don't share these logs
+  verbatim, and clear them before handing off a machine.
+
 ---
 
 ## Command-line flags
