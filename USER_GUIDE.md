@@ -144,6 +144,8 @@ The status row at the bottom shows connection state (`connected`, `reconnecting`
 | `n`       | disable all channels                                                  |
 | `i`       | open chat input. From Channels/Chat pane → All-Chat. From Contacts pane → DM to highlighted contact |
 | `p`       | open position editor                                                  |
+| `m`       | drop a marker (point dropper — aim a crosshair, then fill in details) |
+| `M`       | open the markers overlay (list / delete your placed markers)          |
 | `l`       | open CoT log overlay                                                  |
 | `r`       | reconnect (placeholder)                                               |
 | `+` / `=` | zoom map in (centred on selected contact, or auto-fit centre)         |
@@ -163,6 +165,42 @@ The status row at the bottom shows connection state (`connected`, `reconnecting`
 |--------------|---------------------------------------|
 | `Esc` / `q`  | close overlay                         |
 | `↑` / `↓`    | scroll                                |
+
+### Point dropper (aim)
+
+Press `m` in the main view to drop a marker. A `+` crosshair appears on the
+map and the status bar turns yellow with a live `lat, lon` readout.
+
+| Key                 | Action                                              |
+|---------------------|-----------------------------------------------------|
+| `←` `↑` `↓` `→` / `hjkl` | move the crosshair (one map cell per press)     |
+| `+` / `-`           | zoom the map in / out while aiming                  |
+| `Enter`             | accept the position and open the marker detail form |
+| `Esc`               | cancel                                              |
+
+### Point dropper (detail form)
+
+| Key                 | Action                                              |
+|---------------------|-----------------------------------------------------|
+| `Tab` / `↑` / `↓`   | move between rows                                   |
+| `←` / `→` on the affiliation row | cycle Friendly / Hostile / Neutral / Unknown |
+| `Enter` on a field  | drop the marker (broadcasts the CoT event)          |
+| `Enter` on `[ Drop ]` | drop the marker                                   |
+| `Enter` on `[ Cancel ]` / `Esc` | discard                                 |
+
+The marker appears on your map immediately (even offline) and is broadcast to
+peers on your active channels. Leaving the label blank uses
+"`<affiliation> marker`".
+
+### Markers overlay
+
+Press `M` to list the markers you have placed.
+
+| Key                 | Action                                              |
+|---------------------|-----------------------------------------------------|
+| `↑` / `↓`           | select a marker                                     |
+| `d` / `x` / `Del`   | delete it (broadcasts a CoT delete to peers)        |
+| `M` / `Esc` / `q`   | close the overlay                                   |
 
 ### Position editor
 

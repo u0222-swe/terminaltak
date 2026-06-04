@@ -66,6 +66,14 @@ func (m Model) updateMain(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return newM, cmd
 	}
 
+	if m.dropper.active {
+		return m.updateDropper(msg)
+	}
+
+	if m.showMarkers {
+		return m.updateMarkersOverlay(k)
+	}
+
 	if m.chatInput.active {
 		switch k.Type {
 		case tea.KeyEsc:
@@ -141,6 +149,15 @@ func (m Model) updateMain(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "l":
 		m.showLog = true
 		m.logCursor = 0
+		return m, nil
+	case "m":
+		// Enter the point dropper (ATAK-style): aim a crosshair, then fill
+		// in the marker's affiliation / label before broadcasting it.
+		m = m.startDropper()
+		return m, nil
+	case "M":
+		m.showMarkers = true
+		m.markerCursor = 0
 		return m, nil
 	case "+", "=":
 		m.mapZoom *= 0.7
@@ -294,6 +311,13 @@ func (m Model) sortedContacts() []contacts.Contact {
 		return nil
 	}
 	cs := m.deps.Contacts.Snapshot(func(c contacts.Contact) bool {
+		// Hide UIDs we own as local markers — the server echoes our dropped
+		// markers back as ordinary atom events, but we already render them
+		// from the markers store, so listing them as "contacts" too would
+		// be confusing (a placed marker is not a person).
+		if m.deps.Markers != nil && m.deps.Markers.Has(c.UID) {
+			return false
+		}
 		return m.senderAllowed(c.UID)
 	})
 	sort.Slice(cs, func(i, j int) bool {
@@ -306,6 +330,12 @@ func (m Model) sortedContacts() []contacts.Contact {
 func (m Model) viewMain() string {
 	if m.showLog {
 		return m.viewLogOverlay()
+	}
+	if m.showMarkers {
+		return m.viewMarkersOverlay()
+	}
+	if m.dropper.active && m.dropper.stage == dropForm {
+		return m.viewMarkerForm()
 	}
 	cellTitle := m.titleBar()
 	cellStatus := m.statusBar()
@@ -355,6 +385,14 @@ func (m Model) titleBar() string {
 
 func (m Model) statusBar() string {
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("237")).Width(m.width)
+	// While aiming the point dropper, the status bar becomes a dedicated
+	// crosshair readout + control hint.
+	if m.dropper.active && m.dropper.stage == dropAim {
+		dropStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("0")).Background(lipgloss.Color("11")).Width(m.width)
+		body := fmt.Sprintf(" DROP  %.5f, %.5f   ←↑↓→/hjkl move · Enter set · +/- zoom · Esc cancel",
+			m.dropper.lat, m.dropper.lon)
+		return dropStyle.Render(truncate(body, m.width))
+	}
 	state := m.connStateLabel()
 	if m.connState != takclient.StateConnected && m.connErr != nil {
 		state += " (" + truncate(m.connErr.Error(), 30) + ")"
@@ -364,7 +402,7 @@ func (m Model) statusBar() string {
 		left := time.Until(m.certExpiry).Round(time.Hour)
 		expiry = "cert expires " + m.certExpiry.Format("2006-01-02") + " (" + left.String() + ")"
 	}
-	tail := "q quit · Tab pane · Space toggle · a all · n none · i chat · p pos · l log · +/- zoom · 0 reset"
+	tail := "q quit · Tab pane · Space toggle · i chat · p pos · m drop · M markers · l log · +/- zoom · 0 reset"
 	if m.flash != "" && time.Now().Before(m.flashUntil) {
 		tail = m.flash
 	}
@@ -385,22 +423,31 @@ func (m Model) statusBar() string {
 	return style.Render(truncate(body, m.width))
 }
 
-func (m Model) viewMap(width, height int) string {
-	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("237"))
-	innerW := width - 2
-	innerH := height - 2
-	if innerW <= 0 || innerH <= 0 {
-		return box.Width(width).Height(height).Render("")
+// mapInnerDims returns the drawable width/height inside the map pane's
+// border, matching viewMain's layout. The point dropper uses it so its
+// crosshair maps screen cells to the same projection the map renders with.
+func (m Model) mapInnerDims() (innerW, innerH int) {
+	outerH := m.height - 2
+	if outerH < 10 {
+		outerH = 10
 	}
+	mapH := outerH * 6 / 10
+	return m.width - 2, mapH - 2
+}
 
+// mapView computes the viewport the map pane renders into an innerW×innerH
+// canvas: auto-fit over contacts + self (+ the dropper crosshair while
+// aiming), the Sweden minimum-zoom, aspect correction, the user's manual
+// zoom, and recentring on either the active crosshair or the selected
+// contact. It also returns the resolved self position so callers don't
+// recompute it. Keeping this in one place lets viewMap and the dropper agree
+// on exactly which slice of the world is on screen.
+func (m Model) mapView(innerW, innerH int) (worldmap.Viewport, float64, float64) {
 	cs := m.sortedContacts()
-	coords := make([]worldmap.LatLon, 0, len(cs)+1)
+	coords := make([]worldmap.LatLon, 0, len(cs)+2)
 	for _, c := range cs {
 		coords = append(coords, worldmap.LatLon{Lat: c.Lat, Lon: c.Lon})
 	}
-	// Self position: prefer the publisher's current position so a
-	// random-walk roll between PLI ticks is reflected on the map. Fall
-	// back to cfg when no publisher is wired (e.g. enroll-only run).
 	cfg := m.deps.Config
 	selfLat, selfLon := cfg.SelfPos.Lat, cfg.SelfPos.Lon
 	if m.deps.Publisher != nil {
@@ -411,44 +458,65 @@ func (m Model) viewMap(width, height int) string {
 	if selfLat != 0 || selfLon != 0 {
 		coords = append(coords, worldmap.LatLon{Lat: selfLat, Lon: selfLon})
 	}
-	// AutoFit selects a tight bbox. If the user is in Sweden we widen the
-	// bbox so all of Sweden is always visible — that is the natural
-	// minimum-zoom for a Swedish operator. AspectFit then expands one
-	// axis so the equirectangular projection plus terminal cell aspect
-	// ratio do not flatten the map horizontally at high latitudes.
+	if m.dropper.active {
+		coords = append(coords, worldmap.LatLon{Lat: m.dropper.lat, Lon: m.dropper.lon})
+	}
+
 	view := worldmap.AutoFit(coords)
 	if worldmap.SwedenBBox.Contains(selfLat, selfLon) {
 		view = view.Expand(worldmap.SwedenBBox)
 	}
 	view = view.AspectFit(innerW, innerH)
-
-	// Apply the user's manual zoom first (1.0 = AutoFit, <1 zoomed in).
-	// Scaling around the natural centre, then re-centring on the selected
-	// contact, keeps the contact in the middle even at high latitudes —
-	// applying zoom AFTER CenterOn would re-pick the centre from a bbox
-	// that may already be world-clamped, drifting it back south.
 	if m.mapZoom > 0 && m.mapZoom != 1.0 {
 		view = view.Scale(m.mapZoom)
 	}
+	// Recentre: the crosshair wins while aiming (so panning the crosshair
+	// pans the map under it); otherwise follow the selected contact.
+	if m.dropper.active && m.dropper.stage == dropAim {
+		view = view.CenterOn(m.dropper.lat, m.dropper.lon)
+	} else if m.pane == PaneContacts {
+		if c, ok := m.selectedContact(); ok {
+			view = view.CenterOn(c.Lat, c.Lon)
+		}
+	}
+	return view, selfLat, selfLon
+}
 
-	// Determine which contact (if any) is currently selected so we can
-	// overlay it as a distinct 'X' marker on the map. When the user is
-	// actively cursoring the contacts pane, also recentre the viewport on
-	// that contact (preserving span) so the chosen track is easy to find
-	// on a busy map.
+func (m Model) viewMap(width, height int) string {
+	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("237"))
+	innerW := width - 2
+	innerH := height - 2
+	if innerW <= 0 || innerH <= 0 {
+		return box.Width(width).Height(height).Render("")
+	}
+
+	view, selfLat, selfLon := m.mapView(innerW, innerH)
+	cs := m.sortedContacts()
+
 	selectedUID := ""
-	if m.pane == PaneContacts {
+	if m.pane == PaneContacts && !m.dropper.active {
 		if c, ok := m.selectedContact(); ok {
 			selectedUID = c.UID
-			view = view.CenterOn(c.Lat, c.Lon)
 		}
 	}
 
 	canvas := worldmap.Basemap(view, innerW, innerH)
-	// Draw non-selected contacts first so the selected 'X' is never hidden
-	// by a later contact at the same cell. The selected marker is drawn
-	// after the loop; the self marker (◎) is drawn last so the user's own
-	// position always wins over both.
+
+	// Locally-placed markers are drawn first, under live contacts and the
+	// self marker, so a real track at the same cell stays visible.
+	if m.deps.Markers != nil {
+		for _, mk := range m.deps.Markers.Snapshot() {
+			if !view.Contains(mk.Lat, mk.Lon) {
+				continue
+			}
+			col, row := view.Project(mk.Lat, mk.Lon, innerW, innerH)
+			r, _ := runeForAffiliation(mk.Affiliation)
+			canvas[row][col] = r
+		}
+	}
+
+	// Draw non-selected contacts; the selected 'X' is drawn after the loop
+	// so it is never hidden by a later contact at the same cell.
 	var selCol, selRow int
 	haveSelected := false
 	for _, c := range cs {
@@ -467,6 +535,11 @@ func (m Model) viewMap(width, height int) string {
 	if selfLat != 0 || selfLon != 0 {
 		col, row := view.Project(selfLat, selfLon, innerW, innerH)
 		canvas[row][col] = '◎'
+	}
+	// The crosshair is drawn last so it always sits on top while aiming.
+	if m.dropper.active && m.dropper.stage == dropAim {
+		col, row := view.Project(m.dropper.lat, m.dropper.lon, innerW, innerH)
+		canvas[row][col] = '+'
 	}
 
 	var b strings.Builder

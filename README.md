@@ -29,8 +29,9 @@ A terminal-native [TAK](https://tak.gov) client written in Go. Designed for SSH 
 - **Chat** — All-Chat broadcast plus DMs to a selected contact. Outbound GeoChat uses the `BAO.F.ATAK.<uid>` source string ATAK's reply path expects, and identifies as `ATAK-CIV` in `<takv>` so TAK Server forwards inbound DMs (the server keeps an internal allow-list of "chat-capable" platforms).
 - **Channels panel** — observed access channels listed with direction marker (`(IN)`, `(OUT)`, `(IN/OUT)`). Toggle individual channels with `Space`, all on with `a`, all off with `n`. Outbound filtering is applied via `PUT /Marti/api/groups/activebits`; the contacts cache is wiped on toggle so federation tracks (which evade the server-side per-event filter) disappear immediately.
 - **PLI publishing** — own position published every 5–300 s (default 30 s). Lat/lon enterable as decimal or MGRS. `F2` randomises a Swedish point. Optional **random-walk-Sweden** mode re-rolls the position on every tick — handy for testing without nudging coordinates by hand.
+- **Point dropper** — `m` drops a map marker ATAK-style: aim a `+` crosshair on the map (arrow keys / `hjkl`), then pick affiliation (Friendly / Hostile / Neutral / Unknown) and a label/remarks. The marker (`a-{f,h,n,u}-G`, `<archive/>` for server persistence) is broadcast to your active channels and shown locally at once. `M` lists your markers and deletes them (broadcasting a `t-x-d-d` CoT delete).
 - **CoT log overlay** — `l` opens a scrollable raw-event log with the last N CoT events for protocol debugging.
-- **Skip TLS verify** — config flag for self-signed labs.
+- **Skip TLS verify** — config flag for self-signed labs; a persistent `⚠ TLS UNVERIFIED` banner shows in the status bar while verification is off.
 
 ## Status
 
@@ -96,12 +97,13 @@ cmd/terminaltak/        program entry — wires config → enroll/import → TUI
 internal/
   config/               YAML load/save, ~/.config/terminaltak paths
   enroll/               /Marti/api/tls/{config,signClient/v2}, .p12 import
-  cot/                  CoT XML types, streaming decoder, builders (PLI, GeoChat, takp)
+  cot/                  CoT XML types, streaming decoder, builders (PLI, GeoChat, markers, takp)
   takclient/            mTLS dialer (bidirectional), reconnect, Send queue
   martiapi/             /Marti/api/groups/all, /groups/activebits, /subscriptions/all
   contacts/             in-memory store, derived channel set, stale pruning
   pli/                  periodic publisher, random-walk-Sweden hook
   chat/                 GeoChat store (All-Chat + DMs), bounded ring (2000)
+  markers/              local store of user-placed point-dropper markers
   worldmap/             Natural Earth GeoJSON + Braille renderer + projection
   eventlog/             ring buffer for the CoT log overlay
   mgrs/                 MGRS encode/decode (NIMA TM 8358.1)

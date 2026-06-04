@@ -160,6 +160,19 @@ func (v Viewport) Project(lat, lon float64, width, height int) (col, row int) {
 	return col, row
 }
 
+// Unproject returns the geographic coordinate at the centre of cell
+// (col, row) in a width×height canvas — the inverse of Project. It is used by
+// the point-dropper crosshair to turn a screen cell back into a lat/lon. The
+// cell is assumed in-bounds; out-of-range cells extrapolate linearly.
+func (v Viewport) Unproject(col, row, width, height int) (lat, lon float64) {
+	if width <= 0 || height <= 0 {
+		return (v.MinLat + v.MaxLat) / 2, (v.MinLon + v.MaxLon) / 2
+	}
+	lon = v.MinLon + (float64(col)+0.5)/float64(width)*(v.MaxLon-v.MinLon)
+	lat = v.MaxLat - (float64(row)+0.5)/float64(height)*(v.MaxLat-v.MinLat)
+	return lat, lon
+}
+
 // Marker is one rendered point on the map.
 type Marker struct {
 	Lat, Lon float64

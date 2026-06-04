@@ -12,6 +12,7 @@ import (
 	"github.com/u0222-swe/terminaltak/internal/contacts"
 	"github.com/u0222-swe/terminaltak/internal/cot"
 	"github.com/u0222-swe/terminaltak/internal/eventlog"
+	"github.com/u0222-swe/terminaltak/internal/markers"
 	"github.com/u0222-swe/terminaltak/internal/pli"
 	"github.com/u0222-swe/terminaltak/internal/takclient"
 )
@@ -57,6 +58,7 @@ type Deps struct {
 	Contacts          *contacts.Store
 	Chat              *chat.Store
 	EventLog          *eventlog.Store
+	Markers           *markers.Store
 	Publisher         *pli.Publisher
 	Client            *takclient.Client
 	Send              SendFunc
@@ -100,6 +102,13 @@ type Model struct {
 	// CoT log overlay state. Hidden by default; toggle with "l".
 	showLog   bool
 	logCursor int
+
+	// Point-dropper state. Inert unless dropper.active; see marker.go.
+	dropper dropperState
+
+	// Markers manager overlay state. Hidden by default; toggle with "M".
+	showMarkers  bool
+	markerCursor int
 
 // Channels — sourced from /Marti/api/groups/all (the user's authorised
 	// access groups, displayed as "channels" in the UI). channelGroups
@@ -286,6 +295,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Switch to position editor next.
 		m.mode = ModePosition
 		m.positionForm.focus(0)
+		return m, nil
+
+	case MarkerSendResultMsg:
+		if v.Err != nil {
+			m.setFlash("marker send failed: "+v.Err.Error(), 5*time.Second)
+		}
 		return m, nil
 	}
 
